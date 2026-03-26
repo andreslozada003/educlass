@@ -9,7 +9,7 @@ return [
     'tipos' => [
         'quiz' => [
             'nombre' => 'Quiz Interactivo',
-            'descripcion' => 'Preguntas de opción múltiple con tiempo',
+            'descripcion' => 'Preguntas de opcion multiple con tiempo',
             'icono' => '❓',
             'color' => '#3B82F6',
             'configuracion' => [
@@ -31,7 +31,7 @@ return [
         ],
         'arrastrar' => [
             'nombre' => 'Arrastrar y Soltar',
-            'descripcion' => 'Clasifica elementos en categorías',
+            'descripcion' => 'Clasifica elementos en categorias',
             'icono' => '✋',
             'color' => '#10B981',
             'configuracion' => [
@@ -73,7 +73,7 @@ return [
             ],
         ],
         'clasificar' => [
-            'nombre' => 'Clasificación Rápida',
+            'nombre' => 'Clasificacion Rapida',
             'descripcion' => 'Clasifica elementos que caen',
             'icono' => '⚡',
             'color' => '#06B6D4',
@@ -83,11 +83,25 @@ return [
                 'puntos_por_acierto' => 5,
             ],
         ],
+        'matematica_aventura' => [
+            'nombre' => 'Matematica Aventura',
+            'descripcion' => 'Resuelve operaciones para cruzar puentes, abrir cofres o vencer obstaculos',
+            'icono' => '🧮',
+            'color' => '#0F766E',
+            'configuracion' => [
+                'operacion_principal' => 'mixto',
+                'objetivo_aventura' => 'puente',
+                'recompensa_principal' => 'monedas',
+                'monedas_por_acierto' => 15,
+                'energia_por_acierto' => 10,
+                'mostrar_feedback' => true,
+            ],
+        ],
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Configuración General de Juegos
+    | Configuracion General de Juegos
     |--------------------------------------------------------------------------
     */
     'configuracion' => [

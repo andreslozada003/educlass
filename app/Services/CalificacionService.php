@@ -129,9 +129,9 @@ class CalificacionService
     /**
      * Obtener resumen de calificaciones para docente
      */
-    public function getResumenPorAsignatura(int $asignaturaId, ?int $periodo = null): array
+    public function getResumenPorAsignatura(int $asignaturaId, ?int $periodo = null, ?int $anio = null): array
     {
-        $anioAcademico = ConfiguracionSistema::getAnioAcademico();
+        $anioAcademico = $anio ?? ConfiguracionSistema::getAnioAcademico();
         $query = CalificacionesPeriodo::where('asignatura_id', $asignaturaId)
             ->where('año_academico', $anioAcademico);
 
@@ -294,7 +294,15 @@ class CalificacionService
 public function getEvaluacionesAprobadas($estudiante, $asignaturaId)
 {
     return ResultadosEvaluacion::where('estudiante_id', $estudiante->id)
-        ->whereHas('evaluacion', function ($q) use ($asignaturaId) {
+        ->where('aprobado', true)
+        ->whereHas('evaluacion.tema', function ($q) use ($asignaturaId) {
+            $q->where('asignatura_id', $asignaturaId);
+        })
+        ->count();
+
+    return ResultadosEvaluacion::where('estudiante_id', $estudiante->id)
+        ->where('aprobado', true)
+        ->whereHas('evaluacion.tema', function ($q) use ($asignaturaId) {
             $q->where('tema_id', $asignaturaId); // ajusta según tu relación con asignatura
         })
         ->get()
@@ -308,8 +316,14 @@ public function getEvaluacionesAprobadas($estudiante, $asignaturaId)
 public function getEvaluacionesTotales($estudiante, $asignaturaId)
 {
     return ResultadosEvaluacion::where('estudiante_id', $estudiante->id)
+        ->whereHas('evaluacion.tema', function ($q) use ($asignaturaId) {
+            $q->where('asignatura_id', $asignaturaId);
+        })
+        ->count();
+
+    return ResultadosEvaluacion::where('estudiante_id', $estudiante->id)
         ->whereHas('evaluacion', function ($q) use ($asignaturaId) {
-            $q->where('tema_id', $asignaturaId);
+            $q->where('asignatura_id', $asignaturaId);
         })
         ->count();
 }

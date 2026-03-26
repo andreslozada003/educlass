@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Estudiante;
 
 use App\Http\Controllers\Controller;
-use App\Services\ProgresionService;
-use App\Services\GamificacionService;
-use App\Services\CalificacionService;
-use Illuminate\Support\Facades\Auth;
 use App\Models\Asignatura;
-use App\Models\User;
+use App\Models\Logro;
+use App\Services\CalificacionService;
+use App\Services\GamificacionService;
+use App\Services\ProgresionService;
+use Illuminate\Support\Facades\Auth;
 
 class ProgresoController extends Controller
 {
@@ -33,56 +33,61 @@ class ProgresoController extends Controller
     {
         $estudiante = Auth::user();
 
-        // 🔹 Resumen general
         $resumen = $this->progresionService->getResumenProgreso($estudiante);
-
-        // 🔹 Estadísticas de gamificación
         $estadisticas = $this->gamificacionService->getEstadisticas($estudiante);
-
-        // 🔹 Calificaciones detalladas
         $calificaciones = $this->calificacionService->getCalificacionesDetalladas($estudiante->id);
 
-        // 🔹 Progreso por asignatura
-        $asignaturas = Asignatura::activas()->get();
+        $resumen['puntos_totales'] = $estadisticas['puntos_totales'] ?? ($resumen['puntos_totales'] ?? 0);
+        $resumen['nivel_maximo'] = $resumen['nivel_maximo'] ?? ($resumen['nivel_global'] ?? 1);
+
+        $asignaturas = Asignatura::activas()
+            ->ordenado()
+            ->get();
+
         $progresoPorAsignatura = [];
 
         foreach ($asignaturas as $asignatura) {
-
-            $progreso = $this->progresionService->getProgresoPorAsignatura($estudiante, $asignatura->id);
-
-            $juegosCompletados = $this->gamificacionService->getJuegosCompletados($estudiante, $asignatura->id);
-            $evaluacionesAprobadas = $this->calificacionService->getEvaluacionesAprobadas($estudiante, $asignatura->id);
-            $evaluacionesTotales = $this->calificacionService->getEvaluacionesTotales($estudiante, $asignatura->id);
+            $progresoData = $this->progresionService->getProgresoPorAsignatura($estudiante, $asignatura->id);
+            $progresoData['porcentaje_completado'] = $progresoData['porcentaje_completado'] ?? ($progresoData['porcentaje'] ?? 0);
+            $progresoData['puntos_acumulados'] = $progresoData['puntos_acumulados'] ?? 0;
 
             $progresoPorAsignatura[] = [
                 'asignatura' => $asignatura,
-                'progreso' => $progreso,
-                'juegos_completados' => $juegosCompletados,
-                'evaluaciones_aprobadas' => $evaluacionesAprobadas,
-                'evaluaciones_totales' => $evaluacionesTotales,
+                'progreso' => (object) $progresoData,
+                'juegos_completados' => $this->gamificacionService->getJuegosCompletados($estudiante, $asignatura->id),
+                'evaluaciones_aprobadas' => $this->calificacionService->getEvaluacionesAprobadas($estudiante, $asignatura->id),
+                'evaluaciones_totales' => $this->calificacionService->getEvaluacionesTotales($estudiante, $asignatura->id),
             ];
         }
 
-        // 🔹 Logros recientes
         $logrosRecientes = $estudiante->logrosEstudiante()
             ->with('logro')
             ->orderBy('fecha_obtenido', 'desc')
+            ->limit(8)
             ->get();
 
-        // 🔹 Ranking
         $rankings = $estudiante->rankings()
             ->with('asignatura')
-            ->orderBy('categoria')
+            ->orderBy('puntaje_total', 'desc')
             ->get();
 
-        // 🔹 Retorno a la vista con todas las variables
+        $logrosDisponibles = Logro::activos()
+            ->orderBy('puntos_bonus')
+            ->get();
+
+        $logrosDesbloqueados = $estudiante->logrosEstudiante()
+            ->pluck('logro_id')
+            ->all();
+
         return view('estudiante.progreso.index', compact(
             'resumen',
             'estadisticas',
             'calificaciones',
             'progresoPorAsignatura',
             'logrosRecientes',
-            'rankings'
+            'rankings',
+            'logrosDisponibles',
+            'logrosDesbloqueados'
         ));
     }
 }

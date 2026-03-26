@@ -47,6 +47,7 @@ class DashboardController extends Controller
         // Temas recientes
         $temasRecientes = ProgresoEstudiante::where('estudiante_id', $estudiante->id)
             ->with('tema.asignatura')
+            ->whereHas('tema.asignatura')
             ->whereIn('estado', ['en_progreso', 'completado'])
             ->orderBy('updated_at', 'desc')
             ->limit(5)

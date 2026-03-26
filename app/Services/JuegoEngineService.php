@@ -23,9 +23,11 @@ class JuegoEngineService
             // Carta con el enunciado/pregunta
             $pares[] = [
                 'id' => $id,
+                'pregunta_id' => $pregunta->id,
                 'tipo' => 'pregunta',
                 'contenido' => $pregunta->enunciado,
                 'match_id' => $id,
+                'puntaje' => $pregunta->puntaje,
             ];
 
             // Carta con la respuesta
@@ -35,10 +37,15 @@ class JuegoEngineService
 
             $pares[] = [
                 'id' => $id + 1000, // ID diferente para la carta respuesta
+                'pregunta_id' => $pregunta->id,
                 'tipo' => 'respuesta',
                 'contenido' => $respuesta,
                 'match_id' => $id,
+                'puntaje' => $pregunta->puntaje,
+                'respuesta' => $respuesta,
             ];
+
+            $pares[count($pares) - 2]['respuesta'] = $respuesta;
 
             $id++;
         }
@@ -100,6 +107,34 @@ class JuegoEngineService
     public function generarOrdenarData(Juego $juego): array
     {
         $preguntas = $juego->preguntasActivas;
+
+        if (optional(optional($juego->tema)->asignatura)->slug === 'ingles') {
+            $parejas = [];
+
+            foreach ($preguntas as $pregunta) {
+                $respuesta = is_array($pregunta->respuesta_correcta)
+                    ? ($pregunta->respuesta_correcta[0] ?? '')
+                    : $pregunta->respuesta_correcta;
+
+                $parejas[] = [
+                    'id' => $pregunta->id,
+                    'palabra' => $pregunta->enunciado,
+                    'pareja' => $respuesta,
+                    'puntaje' => $pregunta->puntaje,
+                ];
+            }
+
+            $opciones = $parejas;
+            shuffle($opciones);
+
+            return [
+                'modo' => 'match_words',
+                'parejas' => $parejas,
+                'opciones' => $opciones,
+                'total_elementos' => count($parejas),
+            ];
+        }
+
         $elementos = [];
 
         foreach ($preguntas as $pregunta) {
@@ -137,6 +172,7 @@ class JuegoEngineService
                 'id' => $pregunta->id,
                 'palabra' => strtoupper($respuesta),
                 'pista' => $pregunta->enunciado,
+                'puntaje' => $pregunta->puntaje,
             ];
         }
 
@@ -256,6 +292,7 @@ class JuegoEngineService
                 'id' => $pregunta->id,
                 'enunciado' => $pregunta->enunciado,
                 'respuesta' => $respuesta,
+                'puntaje' => $pregunta->puntaje,
                 'longitud' => strlen($respuesta),
                 'pistas' => $this->generarPistas($respuesta),
             ];

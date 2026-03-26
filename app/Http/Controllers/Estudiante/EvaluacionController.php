@@ -196,11 +196,13 @@ class EvaluacionController extends Controller
 
         // Calcular intentos restantes
         $intentosRestantes = max(0, $evaluacion->intentos_permitidos - $intentoNumero);
+        $logrosObtenidos = [];
 
         // Si aprobó, actualizar gamificación y calificaciones
         if ($aprobado) {
             $this->gamificacionService->actualizarRankingEvaluaciones($estudiante, $evaluacion->tema->asignatura_id);
-            $this->gamificacionService->verificarLogros($estudiante, 'evaluacion_aprobada', [
+            $this->gamificacionService->actualizarRankingGeneral($estudiante);
+            $logrosObtenidos = $this->gamificacionService->verificarLogros($estudiante, 'evaluacion_aprobada', [
                 'evaluacion' => $evaluacion,
                 'resultado' => $resultado,
             ]);
@@ -220,6 +222,7 @@ class EvaluacionController extends Controller
             'success' => true,
             'resultado' => $resultado,
             'intentos_restantes' => $intentosRestantes,
+            'logros_obtenidos' => $logrosObtenidos,
             'redirect' => route('estudiante.evaluaciones.resultado', $resultado->id),
         ]);
     }

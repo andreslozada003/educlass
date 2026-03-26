@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Docente;
 
 use App\Http\Controllers\Controller;
 use App\Models\Asignatura;
-use App\Models\User;
 use App\Models\CalificacionesPeriodo;
+use App\Models\User;
 use App\Services\CalificacionService;
 use App\Services\ExportService;
 use Illuminate\Http\Request;
@@ -31,64 +31,73 @@ class CalificacionesController extends Controller
     {
         $asignaturas = Asignatura::activas()->get();
 
-        $años = CalificacionesPeriodo::selectRaw('YEAR(created_at) as anio')
+        $anios = CalificacionesPeriodo::query()
+            ->select('año_academico as anio')
             ->distinct()
-            ->orderBy('anio', 'desc')
+            ->orderByDesc('anio')
             ->pluck('anio');
 
         $asignaturaSeleccionada = null;
-        $resumen = null;
+        $resumen = [
+            'total_estudiantes' => 0,
+            'promedio_general' => 0,
+            'aprobados' => 0,
+            'reprobados' => 0,
+            'tasa_aprobacion' => 0,
+            'promedio_maximo' => 0,
+            'promedio_minimo' => 0,
+        ];
 
-        // ✅ Paginator vacío inicial
-        $calificaciones = new LengthAwarePaginator([], 0, 10);
+        $calificaciones = new LengthAwarePaginator(
+            collect(),
+            0,
+            10,
+            LengthAwarePaginator::resolveCurrentPage(),
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'query' => $request->query(),
+            ]
+        );
 
         if ($request->filled('asignatura_id')) {
-
             $asignaturaSeleccionada = Asignatura::findOrFail($request->asignatura_id);
-            $periodo = $request->periodo;
-            $anio = $request->anio;
+            $periodo = $request->filled('periodo') ? (int) $request->periodo : null;
+            $anio = $request->filled('anio') ? (int) $request->anio : null;
 
             $resumen = $this->calificacionService->getResumenPorAsignatura(
                 $asignaturaSeleccionada->id,
-                $periodo
+                $periodo,
+                $anio
             );
 
-            $query = User::estudiantes()
-                ->where('activo', true)
-                ->with(['calificacionesPeriodo' => function ($q) use ($asignaturaSeleccionada, $periodo, $anio) {
+            $query = CalificacionesPeriodo::query()
+                ->with(['estudiante', 'asignatura'])
+                ->where('asignatura_id', $asignaturaSeleccionada->id)
+                ->whereHas('estudiante', function ($estudianteQuery) use ($request) {
+                    $estudianteQuery
+                        ->where('tipo', 'estudiante')
+                        ->where('activo', true);
 
-                    $q->where('asignatura_id', $asignaturaSeleccionada->id);
-
-                    if ($periodo) {
-                        $q->where('periodo', $periodo);
+                    if ($request->filled('colegio')) {
+                        $estudianteQuery->where('colegio_id', $request->colegio);
                     }
+                });
 
-                    if ($anio) {
-                        $q->whereYear('created_at', $anio);
-                    }
-                }]);
-
-            if ($request->filled('colegio')) {
-                $query->where('colegio_id', $request->colegio);
+            if ($periodo !== null) {
+                $query->where('periodo', $periodo);
             }
 
-            // ✅ Aquí sí usamos paginate correctamente
-            $estudiantes = $query->orderBy('nombre')->paginate(10);
+            if ($anio !== null) {
+                $query->porAnio($anio);
+            }
 
-            // Transformar SIN perder paginación
-            $estudiantes->getCollection()->transform(function ($estudiante) use ($asignaturaSeleccionada) {
-                return [
-                    'estudiante' => $estudiante,
-                    'calificaciones' => $estudiante->calificacionesPeriodo,
-                    'promedio_anual' => app(CalificacionService::class)
-                        ->calcularPromedioAnual(
-                            $estudiante->id,
-                            $asignaturaSeleccionada->id
-                        ),
-                ];
-            });
-
-            $calificaciones = $estudiantes;
+            $calificaciones = $query
+                ->join('users', 'calificaciones_periodo.estudiante_id', '=', 'users.id')
+                ->orderBy('users.nombre')
+                ->orderBy('calificaciones_periodo.periodo')
+                ->select('calificaciones_periodo.*')
+                ->paginate(10)
+                ->withQueryString();
         }
 
         return view('docente.calificaciones.index', [
@@ -96,7 +105,7 @@ class CalificacionesController extends Controller
             'asignaturaSeleccionada' => $asignaturaSeleccionada,
             'calificaciones' => $calificaciones,
             'resumen' => $resumen,
-            'años' => $años
+            'anios' => $anios,
         ]);
     }
 
@@ -137,9 +146,9 @@ class CalificacionesController extends Controller
         ]);
 
         return $this->exportService->exportarCalificacionesExcel(
-            $request->asignatura_id,
-            $request->periodo,
-            $request->colegio
+            (int) $request->asignatura_id,
+            $request->filled('periodo') ? (int) $request->periodo : null,
+            $request->filled('colegio') ? (int) $request->colegio : null
         );
     }
 

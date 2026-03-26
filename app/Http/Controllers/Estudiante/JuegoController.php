@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Estudiante;
 
 use App\Http\Controllers\Controller;
-use App\Models\Juego;
 use App\Models\IntentosJuego;
+use App\Models\Juego;
 use App\Notifications\ResultadoJuegoNotification;
-use App\Services\ProgresionService;
 use App\Services\GamificacionService;
 use App\Services\JuegoEngineService;
+use App\Services\ProgresionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -36,7 +36,6 @@ class JuegoController extends Controller
         $estudiante = Auth::user();
         $juego = Juego::with(['tema.asignatura', 'preguntasActivas'])->findOrFail($juegoId);
 
-        // Verificar si puede jugar
         $puedeJugar = $this->progresionService->puedeRealizarJuego($estudiante, $juego);
 
         if (!$puedeJugar['puede']) {
@@ -44,10 +43,7 @@ class JuegoController extends Controller
                 ->with('error', $puedeJugar['razon']);
         }
 
-        // Obtener intentos restantes
         $intentosRestantes = $juego->intentosRestantes($estudiante->id);
-
-        // Generar datos específicos según tipo de juego
         $gameData = $this->generarGameData($juego);
         $preguntas = collect($gameData['preguntas'] ?? $juego->preguntasActivas);
 
@@ -60,7 +56,7 @@ class JuegoController extends Controller
     }
 
     /**
-     * Generar datos del juego según tipo
+     * Generar datos del juego segun tipo
      */
     private function generarGameData(Juego $juego): array
     {
@@ -88,10 +84,8 @@ class JuegoController extends Controller
             'duracion_segundos' => 'required|integer|min:0',
         ]);
 
-        // Validar respuestas
         $validacion = $this->juegoEngineService->validarRespuestas($juego, $request->respuestas);
 
-        // Registrar intento
         $intento = $this->gamificacionService->registrarIntento(
             $estudiante,
             $juego,
@@ -102,10 +96,10 @@ class JuegoController extends Controller
 
         $estudiante->notify(new ResultadoJuegoNotification($intento));
 
-        // Verificar logros
         $logrosObtenidos = $this->gamificacionService->verificarLogros($estudiante, 'juego_completado', [
             'juego' => $juego,
             'intento' => $intento,
+            'racha_maxima' => $intento->racha_maxima ?? 0,
         ]);
 
         return response()->json([
@@ -143,16 +137,66 @@ class JuegoController extends Controller
      * Mostrar historial de juegos
      */
     public function historial()
-{
-    $estudiante = Auth::user();
+    {
+        $estudiante = Auth::user();
 
-    $intentos = IntentosJuego::where('estudiante_id', $estudiante->id)
-        ->with('juego') 
-        ->orderBy('fecha_intento', 'desc')
-        ->paginate(10); // 10 por página
+        $consulta = IntentosJuego::where('estudiante_id', $estudiante->id)
+            ->where('completado', true)
+            ->with(['juego.tema.asignatura', 'juego.preguntasActivas'])
+            ->orderByDesc('fecha_intento');
 
-    return view('estudiante.juegos.historial', compact('intentos'));
+        $intentos = (clone $consulta)->paginate(10);
+        $intentosTotales = (clone $consulta)->get();
+
+        $totalRespuestas = $intentosTotales->sum(function ($intento) {
+            return $intento->total_respuestas;
+        });
+
+        $totalCorrectas = $intentosTotales->sum(function ($intento) {
+            return $intento->respuestas_correctas;
+        });
+
+        $estadisticas = [
+            'total_juegos' => $intentosTotales->count(),
+            'puntos_totales' => $intentosTotales->sum('puntaje_obtenido'),
+            'precision' => $totalRespuestas > 0
+                ? round(($totalCorrectas / $totalRespuestas) * 100, 2)
+                : 0,
+            'mejor_racha' => $intentosTotales->max(function ($intento) {
+                return $this->calcularRachaMaxima($intento);
+            }) ?? 0,
+        ];
+
+        return view('estudiante.juegos.historial', compact('intentos', 'estadisticas'));
+    }
+
+    /**
+     * Calcular la racha maxima de respuestas correctas en un intento
+     */
+    private function calcularRachaMaxima(IntentosJuego $intento): int
+    {
+        $respuestas = $intento->respuestas ?? [];
+        $preguntas = optional($intento->juego)->preguntasActivas;
+
+        if (empty($respuestas) || !$preguntas) {
+            return 0;
+        }
+
+        $rachaActual = 0;
+        $rachaMaxima = 0;
+
+        foreach ($respuestas as $preguntaId => $respuesta) {
+            $pregunta = $preguntas->firstWhere('id', (int) $preguntaId)
+                ?? $preguntas->firstWhere('id', $preguntaId);
+
+            if ($pregunta && $pregunta->verificarRespuesta($respuesta)) {
+                $rachaActual++;
+                $rachaMaxima = max($rachaMaxima, $rachaActual);
+            } else {
+                $rachaActual = 0;
+            }
+        }
+
+        return $rachaMaxima;
+    }
 }
-
-}
-

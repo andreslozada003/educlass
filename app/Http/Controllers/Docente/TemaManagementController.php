@@ -125,7 +125,9 @@ class TemaManagementController extends Controller
             ->where('docente_creador_id', Auth::id())
             ->findOrFail($id);
 
-        return view('docente.temas.show', compact('tema'));
+        $recomendacionesCategorias = $this->obtenerRecomendacionesCategorias($tema);
+
+        return view('docente.temas.show', compact('tema', 'recomendacionesCategorias'));
     }
 
     /**
@@ -291,5 +293,80 @@ class TemaManagementController extends Controller
 
         return redirect()->route('docente.temas.edit', $nuevoTema->id)
             ->with('success', 'Tema duplicado exitosamente.');
+    }
+
+    /**
+     * Obtener recomendaciones de categorias por asignatura.
+     */
+    private function obtenerRecomendacionesCategorias(Tema $tema): ?array
+    {
+        $slug = optional($tema->asignatura)->slug;
+
+        $recomendaciones = [
+            'lenguaje' => [
+                'titulo' => 'Español',
+                'categorias' => [
+                    'Quiz',
+                    'Memoria / emparejar',
+                    'Rompecabezas',
+                    'Carrera o tablero',
+                ],
+                'habilidades' => [
+                    'lectura',
+                    'escritura',
+                    'ortografía',
+                    'comprensión lectora',
+                    'formación de oraciones',
+                ],
+            ],
+            'ciencias' => [
+                'titulo' => 'Ciencias',
+                'categorias' => [
+                    'Aventura / misiones',
+                    'Quiz',
+                    'Escape room',
+                    'Memoria / emparejar',
+                ],
+                'habilidades' => [
+                    'clasificación',
+                    'observación',
+                    'conceptos del entorno',
+                    'experimentación',
+                    'relaciones entre elementos',
+                ],
+            ],
+            'ingles' => [
+                'titulo' => 'Inglés',
+                'categorias' => [
+                    'Memoria / emparejar',
+                    'Bingo educativo',
+                    'Quiz',
+                    'Aventura',
+                ],
+                'habilidades' => [
+                    'vocabulario',
+                    'pronunciación',
+                    'asociación palabra-imagen',
+                    'frases básicas',
+                ],
+            ],
+            'matematicas' => [
+                'titulo' => 'Matemáticas',
+                'categorias' => [
+                    'Quiz',
+                    'Carrera o tablero',
+                    'Rompecabezas',
+                    'Escape room',
+                ],
+                'habilidades' => [
+                    'operaciones',
+                    'lógica',
+                    'resolución de problemas',
+                    'cálculo mental',
+                ],
+            ],
+        ];
+
+        return $recomendaciones[$slug] ?? null;
     }
 }

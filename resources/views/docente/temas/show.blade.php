@@ -49,6 +49,60 @@
         </div>
     </div>
 
+    @if($recomendacionesCategorias)
+        <div class="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+            <div class="border-b border-gray-100 px-6 py-5">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.22em]"
+                           style="color: {{ $tema->asignatura->color_primario }}">
+                            Sugerencias de categorias
+                        </p>
+                        <h2 class="mt-2 text-2xl font-bold text-gray-900">
+                            {{ $recomendacionesCategorias['titulo'] }}
+                        </h2>
+                        <p class="mt-2 text-sm text-gray-500">
+                            Las mejores categorias para esta asignatura pueden ayudarte a diseÃ±ar experiencias mas efectivas para el tema.
+                        </p>
+                    </div>
+                    <div class="rounded-2xl px-4 py-3 text-sm font-medium"
+                         style="background-color: {{ $tema->asignatura->color_secundario }}20; color: {{ $tema->asignatura->color_primario }}">
+                        {{ $tema->asignatura->icono }} Recomendacion pedagÃ³gica
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+                <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                    <h3 class="text-lg font-semibold text-gray-900">Las mejores categorÃ­as son:</h3>
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        @foreach($recomendacionesCategorias['categorias'] as $categoria)
+                            <span class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold"
+                                  style="background-color: {{ $tema->asignatura->color_secundario }}20; color: {{ $tema->asignatura->color_primario }}">
+                                {{ $categoria }}
+                            </span>
+                        @endforeach
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                    <h3 class="text-lg font-semibold text-gray-900">Porque ayudan con:</h3>
+                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        @foreach($recomendacionesCategorias['habilidades'] as $habilidad)
+                            <div class="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm">
+                                <span class="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+                                      style="background-color: {{ $tema->asignatura->color_secundario }}20; color: {{ $tema->asignatura->color_primario }}">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                <span class="text-sm font-medium text-gray-700">{{ $habilidad }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Content -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div class="p-6 border-b border-gray-100">

@@ -7,6 +7,8 @@ use App\Models\Tema;
 use App\Models\ProgresoEstudiante;
 use App\Models\Juego;
 use App\Models\Evaluacion;
+use App\Models\IntentosJuego;
+use App\Models\ResultadosEvaluacion;
 
 /**
  * Service ProgresionService - Gestiona la lógica de progresión de estudiantes
@@ -286,6 +288,13 @@ class ProgresionService
 
         // Desbloquear siguiente tema
         $siguienteTema = $this->desbloquearSiguienteTema($estudiante, $tema);
+        $gamificacionService = app(\App\Services\GamificacionService::class);
+        $gamificacionService->actualizarRankingTemas($estudiante, $tema->asignatura_id);
+        $gamificacionService->actualizarRankingGeneral($estudiante);
+        $gamificacionService->verificarLogros($estudiante, 'tema_completado', [
+            'tema' => $tema,
+            'progreso' => $progreso,
+        ]);
 
         return [
             'exito' => true,
@@ -324,13 +333,30 @@ class ProgresionService
         }
 
         $porcentaje = $totalTemas > 0 ? round(($temasCompletados / $totalTemas) * 100, 2) : 0;
+        $puntajeJuegos = IntentosJuego::where('estudiante_id', $estudiante->id)
+            ->where('completado', true)
+            ->whereHas('juego.tema', function ($query) use ($asignaturaId) {
+                $query->where('asignatura_id', $asignaturaId);
+            })
+            ->sum('puntaje_obtenido');
+
+        $puntajeEvaluaciones = ResultadosEvaluacion::where('estudiante_id', $estudiante->id)
+            ->where('aprobado', true)
+            ->whereHas('evaluacion.tema', function ($query) use ($asignaturaId) {
+                $query->where('asignatura_id', $asignaturaId);
+            })
+            ->sum('puntaje_obtenido');
+
+        $puntosAcumulados = $puntajeJuegos + $puntajeEvaluaciones + ($temasCompletados * 100);
 
         return [
             'total_temas' => $totalTemas,
             'temas_completados' => $temasCompletados,
             'temas_en_progreso' => $temasEnProgreso,
             'porcentaje' => $porcentaje,
+            'porcentaje_completado' => $porcentaje,
             'nivel_actual' => $this->calcularNivelActual($porcentaje),
+            'puntos_acumulados' => $puntosAcumulados,
         ];
     }
 
@@ -366,6 +392,16 @@ public function getResumenProgreso(User $estudiante): array
         ? round(($temasCompletados / $totalTemas) * 100, 2)
         : 0;
 
+    $puntajeJuegos = IntentosJuego::where('estudiante_id', $estudiante->id)
+        ->where('completado', true)
+        ->sum('puntaje_obtenido');
+
+    $puntajeEvaluaciones = ResultadosEvaluacion::where('estudiante_id', $estudiante->id)
+        ->where('aprobado', true)
+        ->sum('puntaje_obtenido');
+
+    $puntosTotales = $puntajeJuegos + $puntajeEvaluaciones + ($temasCompletados * 100);
+
     return [
 
         // 🔹 Para progreso/index.blade.php
@@ -380,6 +416,8 @@ public function getResumenProgreso(User $estudiante): array
         // 🔹 Común
         'porcentaje_general' => $porcentajeGeneral,
         'nivel_global' => $this->calcularNivelActual($porcentajeGeneral),
+        'puntos_totales' => $puntosTotales,
+        'nivel_maximo' => $this->calcularNivelActual($porcentajeGeneral),
     ];
 }
 

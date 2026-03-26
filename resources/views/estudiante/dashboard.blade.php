@@ -145,20 +145,27 @@
                 @if($temasRecientes->count() > 0)
                     <div class="space-y-4">
                         @foreach($temasRecientes as $progreso)
-                            <div class="flex items-center gap-4">
-                                <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-                                     style="background-color: {{ $progreso->tema->asignatura->color_secundario }}20">
-                                    {{ $progreso->tema->asignatura->icono }}
+                            @php
+                                $tema = $progreso->tema;
+                                $asignatura = $tema?->asignatura;
+                            @endphp
+
+                            @if($tema && $asignatura)
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center"
+                                         style="background-color: {{ $asignatura->color_secundario }}20">
+                                        {{ $asignatura->icono }}
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-800">{{ $tema->titulo }}</p>
+                                        <p class="text-sm text-gray-500">{{ $asignatura->nombre }}</p>
+                                    </div>
+                                    <span class="px-3 py-1 rounded-full text-xs font-medium
+                                        {{ $progreso->estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700' }}">
+                                        {{ $progreso->estado === 'completado' ? 'Completado' : 'En progreso' }}
+                                    </span>
                                 </div>
-                                <div class="flex-1">
-                                    <p class="font-medium text-gray-800">{{ $progreso->tema->titulo }}</p>
-                                    <p class="text-sm text-gray-500">{{ $progreso->tema->asignatura->nombre }}</p>
-                                </div>
-                                <span class="px-3 py-1 rounded-full text-xs font-medium
-                                    {{ $progreso->estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700' }}">
-                                    {{ $progreso->estado === 'completado' ? 'Completado' : 'En progreso' }}
-                                </span>
-                            </div>
+                            @endif
                         @endforeach
                     </div>
                 @else

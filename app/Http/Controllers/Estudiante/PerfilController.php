@@ -4,93 +4,114 @@ namespace App\Http\Controllers\Estudiante;
 
 use App\Http\Controllers\Controller;
 use App\Models\Colegio;
-use App\Models\Ranking;
-use App\Models\LogrosEstudiante;
 use App\Models\IntentosJuego;
+use App\Models\LogrosEstudiante;
+use App\Models\Ranking;
 use App\Models\ResultadosEvaluacion;
+use App\Services\GamificacionService;
+use App\Services\ProgresionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class PerfilController extends Controller
 {
+    protected $progresionService;
+    protected $gamificacionService;
+
+    public function __construct(
+        ProgresionService $progresionService,
+        GamificacionService $gamificacionService
+    ) {
+        $this->progresionService = $progresionService;
+        $this->gamificacionService = $gamificacionService;
+    }
+
     /**
      * Mostrar perfil
      */
     public function show()
     {
-        $estudiante = Auth::user();
+        $estudiante = Auth::user()->loadMissing('colegio');
         $colegios = Colegio::activos()->orderBy('nombre')->get();
 
-        // Estadísticas
+        $resumen = $this->progresionService->getResumenProgreso($estudiante);
+        $gamificacion = $this->gamificacionService->getEstadisticas($estudiante);
+
         $estadisticas = [
-            'puntos' => $estudiante->puntos_totales ?? $estudiante->puntos ?? 0,
-            'nivel_max' => $estudiante->nivel ?? 1,
-            'juegos' => IntentosJuego::where('estudiante_id', $estudiante->id)->count(),
-            'evaluaciones' => ResultadosEvaluacion::where('estudiante_id', $estudiante->id)->count(),
+            'puntos' => $gamificacion['puntos_totales'] ?? ($resumen['puntos_totales'] ?? 0),
+            'nivel_max' => $resumen['nivel_maximo'] ?? ($resumen['nivel_global'] ?? 1),
+            'juegos' => $gamificacion['total_juegos'] ?? 0,
+            'evaluaciones' => $gamificacion['total_evaluaciones'] ?? 0,
+            'temas_completados' => $resumen['temas_completados'] ?? ($resumen['completadas'] ?? 0),
+            'porcentaje_general' => $resumen['porcentaje_general'] ?? 0,
+            'logros' => $gamificacion['logros_obtenidos'] ?? 0,
         ];
 
-        // Rankings - CORREGIDO: usar puntaje_total
         $rankings = Ranking::with('asignatura')
             ->where('estudiante_id', $estudiante->id)
-            ->orderBy('puntaje_total', 'desc')  // ✅ CORREGIDO
+            ->orderByRaw("CASE WHEN categoria = 'general' THEN 0 ELSE 1 END")
+            ->orderBy('puntaje_total', 'desc')
             ->get();
 
-        // Logros
         $logros = LogrosEstudiante::with('logro')
             ->where('estudiante_id', $estudiante->id)
+            ->orderByDesc('fecha_obtenido')
             ->get();
 
-        // Actividad reciente (últimos 10)
-        $actividades = collect();
-
-        // Juegos recientes
-        $juegosRecientes = IntentosJuego::where('estudiante_id', $estudiante->id)
-            ->latest()
-            ->take(5)
-            ->get()
-            ->map(function($item) {
-                return (object)[
-                    'tipo' => 'juego',
-                    'titulo' => $item->juego->titulo ?? 'Juego',
-                    'puntuacion' => $item->puntuacion ?? 0,
-                    'created_at' => $item->created_at,
-                ];
-            });
-
-        // Evaluaciones recientes
-        $evaluacionesRecientes = ResultadosEvaluacion::with('evaluacion')
+        $juegosRecientes = IntentosJuego::with(['juego.tema.asignatura', 'juego.preguntasActivas'])
             ->where('estudiante_id', $estudiante->id)
-            ->latest()
+            ->where('completado', true)
+            ->orderByDesc('fecha_intento')
             ->take(5)
             ->get()
-            ->map(function($item) {
-                // Calcular porcentaje
-                $puntuacion = 0;
-                if (isset($item->puntaje_total) && $item->puntaje_total > 0) {
-                    $puntuacion = round(($item->puntaje_obtenido / $item->puntaje_total) * 100);
-                }
-                
-                return (object)[
-                    'tipo' => 'evaluacion',
-                    'titulo' => $item->evaluacion->titulo ?? 'Evaluación',
-                    'puntuacion' => $puntuacion,
-                    'created_at' => $item->created_at,
+            ->map(function ($item) {
+                $puntajeTotal = optional($item->juego)->puntaje_maximo
+                    ?: (optional($item->juego)->puntaje_base ?: 0);
+
+                return (object) [
+                    'tipo' => 'juego',
+                    'titulo' => optional($item->juego)->titulo ?? 'Juego',
+                    'detalle' => data_get($item, 'juego.tema.asignatura.nombre', 'Juego educativo'),
+                    'puntuacion' => round($item->porcentaje_aciertos ?? 0),
+                    'puntaje_obtenido' => $item->puntaje_obtenido ?? 0,
+                    'puntaje_total' => $puntajeTotal,
+                    'created_at' => $item->fecha_intento ?? $item->created_at,
                 ];
             });
 
-        $actividades = $juegosRecientes->merge($evaluacionesRecientes)
+        $evaluacionesRecientes = ResultadosEvaluacion::with('evaluacion.tema.asignatura')
+            ->where('estudiante_id', $estudiante->id)
+            ->orderByDesc('fecha_realizacion')
+            ->take(5)
+            ->get()
+            ->map(function ($item) {
+                return (object) [
+                    'tipo' => 'evaluacion',
+                    'titulo' => optional($item->evaluacion)->titulo ?? 'Evaluacion',
+                    'detalle' => data_get($item, 'evaluacion.tema.asignatura.nombre', 'Evaluacion'),
+                    'puntuacion' => round($item->porcentaje_obtenido ?? 0),
+                    'puntaje_obtenido' => $item->puntaje_obtenido ?? 0,
+                    'puntaje_total' => optional($item->evaluacion)->puntaje_total ?: 100,
+                    'created_at' => $item->fecha_realizacion ?? $item->created_at,
+                ];
+            });
+
+        $actividades = $juegosRecientes
+            ->merge($evaluacionesRecientes)
             ->sortByDesc('created_at')
-            ->take(10);
+            ->take(10)
+            ->values();
 
         return view('estudiante.perfil.show', compact(
-            'estudiante', 
-            'colegios', 
-            'estadisticas', 
-            'rankings', 
-            'logros', 
+            'estudiante',
+            'colegios',
+            'resumen',
+            'estadisticas',
+            'rankings',
+            'logros',
             'actividades'
         ));
     }
@@ -128,12 +149,10 @@ class PerfilController extends Controller
 
         $estudiante = Auth::user();
 
-        // Eliminar avatar anterior
         if ($estudiante->avatar) {
             Storage::delete('public/avatars/' . $estudiante->avatar);
         }
 
-        // Guardar nuevo avatar
         $fileName = time() . '_' . $estudiante->id . '.' . $request->avatar->extension();
         $request->avatar->storeAs('public/avatars', $fileName);
 
@@ -143,7 +162,7 @@ class PerfilController extends Controller
     }
 
     /**
-     * Cambiar contraseña
+     * Cambiar contrasena
      */
     public function cambiarPassword(Request $request)
     {
@@ -156,7 +175,7 @@ class PerfilController extends Controller
 
         if (!Hash::check($request->current_password, $estudiante->password)) {
             throw ValidationException::withMessages([
-                'current_password' => ['La contraseña actual es incorrecta.'],
+                'current_password' => ['La contrasena actual es incorrecta.'],
             ]);
         }
 
@@ -164,7 +183,7 @@ class PerfilController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        return redirect()->back()->with('success', 'Contraseña cambiada exitosamente.');
+        return redirect()->back()->with('success', 'Contrasena cambiada exitosamente.');
     }
 
     /**
@@ -180,18 +199,15 @@ class PerfilController extends Controller
 
         if (!Hash::check($request->password, $estudiante->password)) {
             throw ValidationException::withMessages([
-                'password' => ['La contraseña es incorrecta.'],
+                'password' => ['La contrasena es incorrecta.'],
             ]);
         }
 
-        // Eliminar avatar
         if ($estudiante->avatar) {
             Storage::delete('public/avatars/' . $estudiante->avatar);
         }
 
-        // Soft delete
         $estudiante->delete();
-
         Auth::logout();
 
         return redirect()->route('login')->with('success', 'Tu cuenta ha sido eliminada.');
